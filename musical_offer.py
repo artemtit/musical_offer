@@ -174,12 +174,11 @@ async def cmd_tracks(message: types.Message):
     if rejected_tracks:
         response += "❌ Список отклонённых треков:\n\n"
         for idx, track in enumerate(rejected_tracks, 1):
-            user_hash = track.get("user_hash", "unknown")[:8]
             if 'file_id' in track:
-                response += f"{idx}. [Аудио файл] (пользователь: {user_hash}...)\n"
+                response += f"{idx}. [Аудио файл]\n"
             elif 'url' in track:
                 title = track.get('url_title', 'Ссылка')
-                response += f"{idx}. [{title}]({track['url']}) (пользователь: {user_hash}...)\n"
+                response += f"{idx}. [{title}]({track['url']})\n"
     else:
         response += "❌ Нет отклонённых треков.\n"
 
