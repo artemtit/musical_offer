@@ -22,7 +22,7 @@ MODERATOR_ID = int(os.getenv("MODERATOR_ID"))
 APPROVED_TRACKS_FILE = "approved_tracks.json"
 PENDING_TRACKS_FILE = "pending_tracks.json"
 USER_STATUS_FILE = "user_status.json"
-REJECTED_TRACKS_FILE = "rejected_tracks.json"  # ✅ Новый файл
+REJECTED_TRACKS_FILE = "rejected_tracks.json"
 
 # 🤖 Инициализация
 bot = Bot(token=BOT_TOKEN)
@@ -83,7 +83,15 @@ async def process_moderation_comment(message: types.Message, state: FSMContext):
         approved_tracks.append(track)
         await save_json_file(APPROVED_TRACKS_FILE, approved_tracks)
 
-        user_status[user_hash] = "approved"
+        # Получаем текущие счётчики
+        current_info = user_status.get(user_hash, {"status": "none", "sent_count": 0, "approved_count": 0})
+        current_info.setdefault("sent_count", 0)
+        current_info.setdefault("approved_count", 0)
+        sent_count = current_info["sent_count"]
+        approved_count = current_info["approved_count"]
+
+        # Устанавливаем статус: одобрен, увеличиваем approved_count
+        user_status[user_hash] = {"status": "approved", "sent_count": sent_count, "approved_count": approved_count + 1}
         await save_json_file(USER_STATUS_FILE, user_status)
 
         await message.answer("✅ Трек одобрен и добавлен в список!")
@@ -91,7 +99,8 @@ async def process_moderation_comment(message: types.Message, state: FSMContext):
             try:
                 await bot.send_message(
                     user_id,
-                    f"✅ Твой трек был одобрен! 🎶\n\n💬 Комментарий: {comment}"
+                    f"🎉 Ура! Твой трек был одобрен! 🎶\n\n💬 Комментарий: {comment}",
+                    disable_web_page_preview=True
                 )
             except Exception as e:
                 print(f"⚠️ Не удалось отправить сообщение пользователю {user_id}: {e}")
@@ -101,25 +110,31 @@ async def process_moderation_comment(message: types.Message, state: FSMContext):
         track_to_save = track.copy()
         track_to_save.pop("user_id", None)
 
-        print(f"DEBUG: Сохраняем в отклонённые: {track_to_save}")
-
         # ✅ Сохраняем в отклонённые
         rejected_tracks = await load_json_file(REJECTED_TRACKS_FILE, [])
         rejected_tracks.append(track_to_save)
         await save_json_file(REJECTED_TRACKS_FILE, rejected_tracks)
 
-        print(f"DEBUG: Трек сохранён. Теперь в файле: {len(rejected_tracks)} треков.")
+        # Получаем текущие счётчики
+        current_info = user_status.get(user_hash, {"status": "none", "sent_count": 0, "approved_count": 0})
+        current_info.setdefault("sent_count", 0)
+        current_info.setdefault("approved_count", 0)
+        sent_count = current_info["sent_count"]
+        approved_count = current_info["approved_count"]
 
-        user_status[user_hash] = "rejected"
+        # Обновляем статус: отклонён, но sent_count **не увеличиваем**
+        user_status[user_hash] = {"status": "rejected", "sent_count": sent_count - 1, "approved_count": approved_count}
         await save_json_file(USER_STATUS_FILE, user_status)
 
         await message.answer("❌ Трек отклонён и добавлен в список отклонённых.")
         if user_id:
             try:
+                # Счётчик оставшихся
+                remaining = 3 - sent_count
                 await bot.send_message(
                     user_id,
-                    f"❌ Твой трек был отклонён. 😔\n\n💬 Комментарий: {comment}\n\n"
-                    "Ты можешь прислать новый трек!"
+                    f"😔 К сожалению, твой трек был отклонён.\n\n💬 Комментарий: {comment}\n\n"
+                    f"Ты можешь прислать новый трек! 🎧\nОсталось отправить: {remaining} трек(ов)"
                 )
             except Exception as e:
                 print(f"⚠️ Не удалось отправить сообщение пользователю {user_id}: {e}")
@@ -140,13 +155,24 @@ async def process_moderation_comment(message: types.Message, state: FSMContext):
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
+    # Создаём кнопку
+    keyboard = InlineKeyboardBuilder()
+    keyboard.add(InlineKeyboardButton(
+        text="📖 Правила тусовки",
+        url="https://teletype.in/@artem2601/8pDqOmM9g4X"  # Ссылка на правила
+    ))
+    reply_markup = keyboard.as_markup()
+
     await message.answer(
-        "Привет! 🎧✨\n\nОтправь мне трек — аудио или ссылку на YouTube/Spotify и др. 🎶\n\n"
-        "⚠️ Ты можешь прислать только один трек, который будет одобрен. "
-        "Если он отклонён, можно прислать новый. 🔒"
+        "✨ Привет! 🎧\n\n"
+        "Я — Party Music Bot 🎵 — твой DJ-помощник для новогодней тусовки! 🎉\n\n"
+        "Ты можешь прислать мне до 3 треков — аудио или ссылку (YouTube, Spotify, Яндекс.Музыка и др.).\n\n"
+        "⚠️ После отправки ты больше не сможешь прислать трек (если он одобрен), но если он будет отклонён — можно снова! 🔐\n\n"
+        "Всё анонимно — твои данные в безопасности! 🛡️\n\n"
+        "Нажми кнопку ниже, чтобы ознакомиться с правилами:",
+        reply_markup=reply_markup
     )
 
-# ✅ Обновлённая команда: /tracks — теперь показывает одобренные и отклонённые
 @dp.message(Command("tracks"))
 async def cmd_tracks(message: types.Message):
     if message.from_user.id != MODERATOR_ID:
@@ -160,27 +186,27 @@ async def cmd_tracks(message: types.Message):
 
     # Одобрённые
     if approved_tracks:
-        response += "🎧 Список одобренных треков:\n\n"
+        response += "Одобренные треки:\n\n"
         for idx, track in enumerate(approved_tracks, 1):
             if 'file_id' in track:
-                response += f"{idx}. [Аудио файл]\n"
+                response += f"{idx}. 🎵 Аудио файл\n"
             elif 'url' in track:
                 title = track.get('url_title', 'Ссылка')
-                response += f"{idx}. [{title}]({track['url']})\n"
+                response += f"{idx}. 🎵 [{title}]({track['url']})\n"
     else:
-        response += "🎧 Нет одобренных треков.\n\n"
+        response += "Нет одобренных треков.\n\n"
 
     # Отклонённые
     if rejected_tracks:
-        response += "❌ Список отклонённых треков:\n\n"
+        response += "Отклонённые треки:\n\n"
         for idx, track in enumerate(rejected_tracks, 1):
             if 'file_id' in track:
-                response += f"{idx}. [Аудио файл]\n"
+                response += f"{idx}. 🎵 Аудио файл\n"
             elif 'url' in track:
                 title = track.get('url_title', 'Ссылка')
-                response += f"{idx}. [{title}]({track['url']})\n"
+                response += f"{idx}. 🎵 [{title}]({track['url']})\n"
     else:
-        response += "❌ Нет отклонённых треков.\n"
+        response += "Нет отклонённых треков.\n"
 
     await message.answer(response, parse_mode="Markdown")
 
@@ -192,17 +218,17 @@ async def cmd_check(message: types.Message):
 
     pending_tracks = await load_json_file(PENDING_TRACKS_FILE)
     if not pending_tracks:
-        await message.answer("📋 Нет треков на модерации.")
+        await message.answer("Нет треков на модерации.", parse_mode="Markdown")
         return
 
-    response = "📋 Треки на модерации:\n\n"
+    response = "Треки на модерации:\n\n"
     for idx, track in enumerate(pending_tracks, 1):
         user_hash = track.get("user_hash", "unknown")[:8]
         if track["type"] == "audio":
-            response += f"{idx}. Аудио (пользователь: {user_hash}...)\n"
+            response += f"{idx}. 🎵 Аудио (пользователь: `{user_hash}...`)\n"
         elif track["type"] == "url":
             title = track.get('url_title', 'Ссылка')
-            response += f"{idx}. [{title}]({track['url']}) (пользователь: {user_hash}...)\n"
+            response += f"{idx}. 🎵 [{title}]({track['url']}) (пользователь: `{user_hash}...`)\n"
     await message.answer(response, parse_mode="Markdown")
 
 @dp.message(Command("moderate"))
@@ -213,9 +239,10 @@ async def cmd_moderate(message: types.Message):
 
     pending_tracks = await load_json_file(PENDING_TRACKS_FILE)
     if not pending_tracks:
-        await message.answer("📋 Нет треков на модерации.")
+        await message.answer("Нет треков на модерации.", parse_mode="Markdown")
         return
 
+    await message.answer("Начинаю модерацию...", parse_mode="Markdown")
     await send_moderation_message(pending_tracks[0], 0)
 
 # 📥 Обработка входящих сообщений от пользователей
@@ -229,12 +256,25 @@ async def handle_message(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     user_hash = hash_user_id(user_id)
 
-    # Проверка статуса пользователя
+    # Проверка статуса пользователя (загружаем как словарь!)
     user_status = await load_json_file(USER_STATUS_FILE, {})
-    status = user_status.get(user_hash, "none")
 
-    if status == "approved":
-        await message.answer("✅ Твой трек уже одобрен. Больше нельзя присылать. 🎶")
+    # Получаем статус и счётчики
+    user_info = user_status.get(user_hash, {"status": "none", "sent_count": 0, "approved_count": 0})
+    # Убедимся, что поля существуют
+    user_info.setdefault("sent_count", 0)
+    user_info.setdefault("approved_count", 0)
+    status = user_info["status"]
+    sent_count = user_info["sent_count"]
+    approved_count = user_info["approved_count"]
+
+    if approved_count >= 3:
+        await message.answer("✅ Ты уже отправил 3 трека, и все они одобрены. Больше нельзя. 🎶")
+        return
+
+    # Проверка: можно ли отправить?
+    if sent_count >= 3:
+        await message.answer("❌ Ты уже отправил 3 трека. Больше нельзя. 🎧")
         return
 
     # Определение типа трека
@@ -270,15 +310,22 @@ async def handle_message(message: types.Message, state: FSMContext):
     await save_json_file(PENDING_TRACKS_FILE, pending_tracks)
 
     # Обновляем статус
-    user_status[user_hash] = "pending"
+    user_status[user_hash] = {"status": "pending", "sent_count": sent_count + 1, "approved_count": approved_count}
     await save_json_file(USER_STATUS_FILE, user_status)
 
+    # Счётчик оставшихся
+    remaining = 3 - (sent_count + 1)
+
     # ✅ Отправляем уведомление пользователю
-    await message.answer("⏳ Твой трек на модерации... Ожидай результата! 🎶")
+    await message.answer(
+        f"⏳ Твой трек на модерации... Ожидай результата! 🎶\n"
+        f"Осталось отправить: {remaining} трек(ов)"
+    )
 
     await bot.send_message(
         MODERATOR_ID,
-        f"🎵 Новый трек на модерации!\nПользователь: {user_hash[:8]}..."
+        f"🎵 Новый трек на модерации!\nПользователь: `{user_hash[:8]}...`",
+        parse_mode="Markdown"
     )
 
 # 🎛️ Отправка трека модератору с кнопками
@@ -293,16 +340,18 @@ async def send_moderation_message(track, track_id: int):
             MODERATOR_ID,
             track["file_id"],
             caption="🎵 Трек на модерации",
-            reply_markup=reply_markup
+            reply_markup=reply_markup,
+            parse_mode="Markdown"
         )
     else:
         url = track["url"]
         title = track.get("url_title", "Ссылка")
         await bot.send_message(
             MODERATOR_ID,
-            f"🔗 Ссылка на модерации:\n\n[{title}]({url})",
+            f"🔗 Ссылка на модерации:\n\n [{title}]({url})",
             reply_markup=reply_markup,
-            parse_mode="Markdown"
+            parse_mode="Markdown",
+            disable_web_page_preview=True  # ⬅️ Отключаем предпросмотр
         )
 
 # ⚖️ Обработка нажатия кнопок модерации
