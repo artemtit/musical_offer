@@ -12,7 +12,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.types import InlineKeyboardButton
 from dotenv import load_dotenv
-from supabase import create_client
+from supabase import create_client, Client
 
 # === Логирование ===
 logging.basicConfig(level=logging.INFO)
@@ -27,7 +27,7 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
 # === Подключение к Supabase ===
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # === Инициализация бота ===
 bot = Bot(token=BOT_TOKEN)
@@ -319,7 +319,8 @@ def health():
     return {"ok": True}
 
 def run_flask():
-    port = int(os.environ.get("PORT", 8000))
+    # Используем PORT из переменных окружения Render
+    port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port, threaded=True)
 
 # === Запуск ===
