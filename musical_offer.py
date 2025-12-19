@@ -12,7 +12,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.types import InlineKeyboardButton
 from dotenv import load_dotenv
-from supabase import create_client # Убрали ClientResponseError
+from supabase import create_client 
 
 # === Логирование ===
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -30,7 +30,7 @@ SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 DEADLINE = datetime(2025, 12, 26, 23, 59, 59, tzinfo=timezone.utc)
 
 # === Подключение к Supabase ===
-# Убрали аннотацию типа, так как ClientResponseError не найден
+# Убрали аннотацию типа, так как она не обязательна и может вызвать ошибки
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # === Инициализация бота ===
@@ -93,13 +93,13 @@ async def cmd_start(message: types.Message):
 
     welcome_text = (
         f"✨ Привет, <b>{message.from_user.first_name}</b>! 🎧\n\n"
-        f"Я — <b>Party Music Bot</b> 🎵, и я помогу тебе подготовиться к новогодней тусовке! 🎄🎉\n\n"
+        f"Я — <b>Party Music Bot</b> 🎵, и я помогу тебе составить плейлист к новогодней тусовке! 🎄🎉\n\n"
         f"<b>Ты можешь прислать до 3 треков</b> — это могут быть аудиофайлы или ссылки на YouTube, Spotify, Яндекс.Музыку и другие платформы.\n\n"
         f"✅ <b>Одобренный</b> трек закрепляется.\n"
         f"❌ <b>Отклонённый</b> трек — можно заменить новым!\n\n"
         f"📊 <b>Ты уже отправил:</b> {total_sent}/3\n"
         f"🎵 <b>Осталось отправить:</b> {remaining}\n\n"
-        f"🔐 Всё анонимно — твои данные в безопасности! 🛡️\n\n"
+        f"🔐 Всё анонимно!\n\n"
         f"Если возникнут вопросы — писать в <a href='https://t.me/ligr5'><b>поддержку</b></a>! 📩"
     )
 
@@ -404,7 +404,8 @@ def health():
     return {"ok": True}
 
 def run_flask():
-    port = int(os.environ.get("PORT", 8000))
+    # Используем PORT из переменных окружения Render
+    port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port, threaded=True)
 
 # === Запуск ===

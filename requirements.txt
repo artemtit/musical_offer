@@ -3,3 +3,4 @@ aiofiles>=23.0
 python-dotenv>=1.0
 Flask>=3.0
 supabase>=2.7.1
+httpx>=0.25.0
