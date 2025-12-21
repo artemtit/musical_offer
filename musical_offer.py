@@ -86,26 +86,42 @@ def get_track_by_id(track_id: str):
 # =======================
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
-    user_hash = hash_user_id(message.from_user.id)
+    user_id = message.from_user.id
+    user_hash = hash_user_id(user_id)
 
     try:
-        pending = supabase.table("pending_tracks").select("id").eq("user_hash", user_hash).execute().data
-        approved = supabase.table("approved_tracks").select("id").eq("user_hash", user_hash).execute().data
+        pending = supabase.table("pending_tracks") \
+            .select("id") \
+            .eq("user_hash", user_hash) \
+            .execute().data
+
+        approved = supabase.table("approved_tracks") \
+            .select("id") \
+            .eq("user_hash", user_hash) \
+            .execute().data
     except Exception as e:
-        logging.error(e)
-        await message.answer("❌ Ошибка загрузки данных.")
+        logging.error(f"/start load error: {e}")
+        await message.answer("❌ Не удалось загрузить данные. Попробуй позже.")
         return
 
-    total = len(pending) + len(approved)
-    remaining = max(0, 3 - total)
+    sent = len(pending) + len(approved)
+    remaining = max(0, 3 - sent)
 
-    await message.answer(
+    text = (
         f"🎧 <b>Party Music Bot</b>\n\n"
-        f"Ты отправил: {total}/3\n"
-        f"Осталось: {remaining}\n\n"
-        f"Отправь аудио или ссылку 🎵",
-        parse_mode="HTML"
+        f"Привет, <b>{message.from_user.first_name}</b>! 👋\n\n"
+        f"Ты можешь отправить <b>до 3 треков</b> для общего плейлиста.\n\n"
+        f"📊 <b>Отправлено:</b> {sent}/3\n"
+        f"🎵 <b>Осталось:</b> {remaining}\n\n"
+        f"📎 Пришли:\n"
+        f"• 🎵 аудиофайл\n"
+        f"• 🔗 ссылку (YouTube, Spotify, Яндекс Музыка и др.)\n\n"
+        f"🔐 Всё анонимно — модератор видит только хеш.\n\n"
+        f"⏰ Дедлайн: <b>26 декабря</b>"
     )
+
+    await message.answer(text, parse_mode="HTML")
+
 
 # =======================
 # MODERATOR COMMANDS
